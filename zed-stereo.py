@@ -111,6 +111,7 @@ parser.add_argument("-xml", "--config_file_xml", type=str, help="manual camera c
 parser.add_argument("--showcontrols", action='store_true', help="display track bar disparity tuning controls");
 if (open3d_available):
     parser.add_argument("-3d", "--show3d", action='store_true', help="display resulting live 3D point cloud");
+    parser.add_argument("-single", "--single_shot_display", action="store_true", help="display only a single frame")
 
 args = parser.parse_args()
 
@@ -411,14 +412,16 @@ if (zed_cam.isOpened()) :
             point_cloud.transform([[-1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]]);
             point_cloud = o3d.crop_point_cloud(point_cloud, np.array([-5000., -3000.0000, -10000.0000]), np.array([5000.0000, 3000.0000, 0.0000]))
 
-            #o3d.draw_geometries([point_cloud, coordinate_axes])
-            # update the 3D visualization which is referencing the depth points
+            if args.single_shot_display:
+                o3d.draw_geometries([point_cloud, coordinate_axes])
+            else:
+                # update the 3D visualization which is referencing the depth points
 
-            window_3d_vis.add_geometry(point_cloud);
-            window_3d_vis.update_geometry();
-            #window_3d_vis.reset_view_point(True);
-            window_3d_vis.poll_events();
-            window_3d_vis.update_renderer();
+                window_3d_vis.add_geometry(point_cloud);
+                window_3d_vis.update_geometry();
+                #window_3d_vis.reset_view_point(True);
+                window_3d_vis.poll_events();
+                window_3d_vis.update_renderer();
 
 
             # o3d.draw_geometries([point_cloud])
@@ -523,10 +526,8 @@ if (zed_cam.isOpened()) :
 
             # reset to new camera resolution
 
-            zed_cam.release()
-            zed_cam.openSet(args.camera_to_use, width, height)
-            #zed_cam.set(cv2.CAP_PROP_FRAME_WIDTH, width)
-            #zed_cam.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+            zed_cam.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+            zed_cam.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
 
             width = int(zed_cam.get(cv2.CAP_PROP_FRAME_WIDTH))
             height =  int(zed_cam.get(cv2.CAP_PROP_FRAME_HEIGHT))

@@ -16,6 +16,7 @@ import math
 import requests
 import configparser
 
+from collections import OrderedDict
 from camera_stream import *
 from zed_calibration import *
 from utils import *
@@ -168,8 +169,8 @@ height,width, channels = frame.shape;
 # 720p 	60 	    2560 x 720      HD
 # WVGA 	100 	1344 x 376      VGA
 
-config_options_width = {4416: "2K", 3840: "FHD", 2560: "HD", 1344: "VGA"};
-config_options_height = {1242: "2K", 1080: "FHD", 720: "HD", 376: "VGA"};
+config_options_width = OrderedDict({4416: "2K", 3840: "FHD", 2560: "HD", 1344: "VGA"});
+config_options_height = OrderedDict({1242: "2K", 1080: "FHD", 720: "HD", 376: "VGA"});
 
 try:
     camera_mode = config_options_width[width];
@@ -447,7 +448,7 @@ if (zed_cam.isOpened()) :
             # get calibration for new camera resolution
 
             if (camera_calibration_available):
-                fx, fy, B, Kl, Kr, R, T = zed_camera_calibration(cam_calibration, camera_mode, width, height);
+                fx, fy, B, Kl, Kr, R, T, Q = zed_camera_calibration(cam_calibration, camera_mode, width, height);
 
     # release camera
 

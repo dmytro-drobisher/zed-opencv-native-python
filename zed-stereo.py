@@ -218,7 +218,7 @@ print();
 if (camera_calibration_available):
     cam_calibration = configparser.ConfigParser();
     cam_calibration.read(path_to_config_file);
-    fx, fy, B, Kl, Kr, R, T, Q = zed_camera_calibration(cam_calibration, camera_mode, width, height);
+    fx, fy, B, Kl, Kr, distCoeffsL, distCoeffsR, R, T, Q = zed_camera_calibration(cam_calibration, camera_mode, width, height);
 
     # correct factory supplied values if specified
 
@@ -228,7 +228,7 @@ if (camera_calibration_available):
         Q[0][3] =  -1 * (width / 4); Q[1][3] = -1 * (height / 2);
         Q[2][3] = fx; Q[3][3] = 0; # as Lcx == Rcx
 elif (manual_camera_calibration_available):
-    fx, fy, B, Kl, Kr, R, T, Q = read_manual_calibration(path_to_config_file);
+    fx, fy, B, Kl, Kr, distCoeffsL, distCoeffsR, R, T, Q = read_manual_calibration(path_to_config_file);
     # no correction needed here
 
 ################################################################################
@@ -243,9 +243,9 @@ windowName3D = "Live - 3D Point Cloud"; # window name
 
 # set up defaults for stereo disparity calculation
 
-max_disparity = 160;
-window_size = 9;
-block_size = 15
+max_disparity = 160
+window_size = 3
+block_size = 17
 
 ### modified for 2K image
 stereoProcessor = cv2.StereoSGBM_create(
@@ -254,13 +254,16 @@ stereoProcessor = cv2.StereoSGBM_create(
         blockSize=block_size,
         P1=8 * 3 * window_size ** 2,       # 8*number_of_image_channels*SADWindowSize*SADWindowSize
         P2=32 * 3 * window_size ** 2,      # 32*number_of_image_channels*SADWindowSize*SADWindowSize
-        disp12MaxDiff=1,
-        uniquenessRatio=5,
+        #disp12MaxDiff=1,
+        uniquenessRatio=15,
         speckleWindowSize=0,
-        speckleRange=2,
-        preFilterCap=15,
-        mode=cv2.STEREO_SGBM_MODE_HH
+        speckleRange=1,
+        #preFilterCap=15,
+        mode=cv2.STEREO_SGBM_MODE_HH4
 )
+
+# calculate rectification transforms
+Kl, Kr, map_l_x, map_l_y, map_r_x, map_r_y = initCalibration(Kl, Kr, distCoeffsL, distCoeffsR, height, width // 2, R, T)
 
 ################################################################################
 
@@ -336,6 +339,17 @@ if (zed_cam.isOpened()) :
         frameL= frame[:,0:int(width/2),:]
         frameR = frame[:,int(width/2):width,:]
 
+        # stereo rectification
+        frameL = cv2.remap(frameL, map_l_x, map_l_y, cv2.INTER_LINEAR)
+        frameR = cv2.remap(frameR, map_r_x, map_r_y, cv2.INTER_LINEAR)
+
+        # images come out flipped horisontally and vertically so reverse transformation is applied
+        frameL = cv2.flip(frameL, 1)
+        frameL = cv2.flip(frameL, 0)
+
+        frameR = cv2.flip(frameR, 1)
+        frameR = cv2.flip(frameR, 0)
+
         # remember to convert to grayscale (as the disparity matching works on grayscale)        
         grayL = cv2.cvtColor(frameL,cv2.COLOR_BGR2GRAY);
         grayR = cv2.cvtColor(frameR,cv2.COLOR_BGR2GRAY);
@@ -351,7 +365,7 @@ if (zed_cam.isOpened()) :
 
         disparity = stereoProcessor.compute(grayL,grayR);
 
-        # cv2.filterSpeckles(disparity, 0, 4000, max_disparity);
+        cv2.filterSpeckles(disparity, 0, 4000, 200);
 
         # scale the disparity to 8-bit for viewing
         # divide by 16 and convert to 8-bit image (then range of values should
@@ -546,7 +560,10 @@ if (zed_cam.isOpened()) :
             # get calibration for new camera resolution
 
             if (camera_calibration_available):
-                fx, fy, B, Kl, Kr, R, T, Q = zed_camera_calibration(cam_calibration, camera_mode, width, height);
+                fx, fy, B, Kl, Kr, distCoeffsL, distCoeffsR, R, T, Q = zed_camera_calibration(cam_calibration, camera_mode, width, height);
+                
+                #recalculate rectification maps
+                Kl, Kr, map_l_x, map_l_y, map_r_x, map_r_y = initCalibration(Kl, Kr, distCoeffsL, distCoeffsR, height, width // 2, R, T)
 
             ####################################################################
 

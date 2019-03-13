@@ -243,23 +243,23 @@ windowName3D = "Live - 3D Point Cloud"; # window name
 
 # set up defaults for stereo disparity calculation
 
-max_disparity = 160
-window_size = 3
-block_size = 17
+max_disparity = 160;
+window_size = 9;
+block_size = 15
 
 ### modified for 2K image
 stereoProcessor = cv2.StereoSGBM_create(
         minDisparity=0,
         numDisparities = max_disparity, # max_disp has to be dividable by 16 f. E. HH 192, 256
         blockSize=block_size,
-        P1=8 * 3 * window_size ** 2,       # 8*number_of_image_channels*SADWindowSize*SADWindowSize
-        P2=32 * 3 * window_size ** 2,      # 32*number_of_image_channels*SADWindowSize*SADWindowSize
+        #P1=8 * 3 * window_size ** 2,       # 8*number_of_image_channels*SADWindowSize*SADWindowSize
+        #P2=32 * 3 * window_size ** 2,      # 32*number_of_image_channels*SADWindowSize*SADWindowSize
         #disp12MaxDiff=1,
-        uniquenessRatio=15,
-        speckleWindowSize=0,
-        speckleRange=1,
+        #uniquenessRatio=5,
+        #speckleWindowSize=0,
+        #speckleRange=2,
         #preFilterCap=15,
-        mode=cv2.STEREO_SGBM_MODE_HH4
+        mode=cv2.STEREO_SGBM_MODE_HH
 )
 
 # calculate rectification transforms
@@ -374,7 +374,7 @@ if (zed_cam.isOpened()) :
         # as disparity=-1 means no disparity available
 
         _, disparity = cv2.threshold(disparity,0, max_disparity * 16, cv2.THRESH_TOZERO);
-        disparity_scaled = (disparity / 16);
+        disparity_scaled = np.around(disparity / 16, decimals=1);
 
         # fill disparity if requested
 

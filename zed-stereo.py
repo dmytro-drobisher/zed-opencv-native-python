@@ -203,7 +203,7 @@ print();
 if (camera_calibration_available):
     cam_calibration = configparser.ConfigParser();
     cam_calibration.read(path_to_config_file);
-    fx, fy, B, Kl, Kr, R, T, Q = zed_camera_calibration(cam_calibration, camera_mode, width, height);
+    fx, fy, B, Kl, Kr, distCoeffsL, distCoeffsR, R, T, Q = zed_camera_calibration(cam_calibration, camera_mode, width, height);
 
     # correct factory supplied values if specified
 
@@ -213,7 +213,7 @@ if (camera_calibration_available):
         Q[0][3] =  -1 * (width / 4); Q[1][3] = -1 * (height / 2);
         Q[2][3] = fx; Q[3][3] = 0; # as Lcx == Rcx
 elif (manual_camera_calibration_available):
-    fx, fy, B, Kl, Kr, R, T, Q = read_manual_calibration(path_to_config_file);
+    fx, fy, B, Kl, Kr, distCoeffsL, distCoeffsR, R, T, Q = read_manual_calibration(path_to_config_file);
     # no correction needed here
 
 ################################################################################
@@ -243,6 +243,8 @@ stereoProcessor = cv2.StereoSGBM_create(
         #preFilterCap=63,
         mode=cv2.STEREO_SGBM_MODE_HH
 )
+
+Kl, Kr, map_l_x, map_l_y, map_r_x, map_r_y = initCalibration(Kl, Kr, distCoeffsL, distCoeffsR, height, width // 2, R, T)
 
 ################################################################################
 
@@ -302,6 +304,17 @@ if (zed_cam.isOpened()) :
 
         frameL= frame[:,0:int(width/2),:]
         frameR = frame[:,int(width/2):width,:]
+
+        # stereo rectification
+        frameL = cv2.remap(frameL, map_l_x, map_l_y, cv2.INTER_LINEAR)
+        frameR = cv2.remap(frameR, map_r_x, map_r_y, cv2.INTER_LINEAR)
+
+        # images come out flipped horisontally and vertically so reverse transformation is applied
+        frameL = cv2.flip(frameL, 1)
+        frameL = cv2.flip(frameL, 0)
+
+        frameR = cv2.flip(frameR, 1)
+        frameR = cv2.flip(frameR, 0)
 
         # remember to convert to grayscale (as the disparity matching works on grayscale)
 
@@ -449,6 +462,9 @@ if (zed_cam.isOpened()) :
 
             if (camera_calibration_available):
                 fx, fy, B, Kl, Kr, R, T, Q = zed_camera_calibration(cam_calibration, camera_mode, width, height);
+
+                # recalculate rectification maps
+                Kl, Kr, map_l_x, map_l_y, map_r_x, map_r_y = initCalibration(Kl, Kr, distCoeffsL, distCoeffsR, height, width // 2, R, T)
 
     # release camera
 

@@ -39,7 +39,7 @@ def h_concatenate(img1, img2):
     if ((channels1 > channels2) and (channels1 == 3)):
         out2 = cv2.cvtColor(img2, cv2.COLOR_GRAY2BGR);
         out1 = img1;
-    elif ((channels2 > channels1) and (channels2 == 3)):
+    elif ((channels2 > channels1) and (channels1 == 3)):
         out1 = cv2.cvtColor(img1, cv2.COLOR_GRAY2BGR);
         out2 = img2;
     else: # both must be equal
@@ -81,7 +81,7 @@ def v_concatenate(img1, img2):
     if ((channels1 > channels2) and (channels1 == 3)):
         out2 = cv2.cvtColor(img2, cv2.COLOR_GRAY2BGR);
         out1 = img1;
-    elif ((channels2 > channels1) and (channels2 == 3)):
+    elif ((channels2 > channels1) and (channels1 == 3)):
         out1 = cv2.cvtColor(img1, cv2.COLOR_GRAY2BGR);
         out2 = img2;
     else: # both must be equal
@@ -96,3 +96,13 @@ def v_concatenate(img1, img2):
     return np.vstack((out1, out2));
 
 ################################################################################
+
+# calculate new camera matrices and rectification maps 
+
+def initCalibration(Kl, Kr, distCoeffsL, distCoeffsR, height, width, R, T):
+    R1, R2, P1, P2, _, _, _ = cv2.stereoRectify(Kl, distCoeffsL, Kr, distCoeffsR, (width, height), R, T, cv2.CALIB_ZERO_DISPARITY, 0, (width, height))
+
+    map_l_x, map_l_y = cv2.initUndistortRectifyMap(Kl, distCoeffsL, R1, P1, (width, height), cv2.CV_32FC2)
+    map_r_x, map_r_y = cv2.initUndistortRectifyMap(Kr, distCoeffsL, R2, P2, (width, height), cv2.CV_32FC2)
+
+    return P1, P2, map_l_x, map_l_y, map_r_x, map_r_y

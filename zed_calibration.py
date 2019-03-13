@@ -71,8 +71,8 @@ def zed_camera_calibration(camera_calibration, camera_mode, full_width, height):
     # define intrinsic camera distortion coefficients, for {left, right} caneras
     # N.B. in ZED code last three values are zero by default
 
-    distCoeffsR = np.array([[Rk1], [Rk2], [Rk3], [Rp1], [Rp2]]);
-    distCoeffsL = np.array([[Lk1], [Lk2], [Lk3], [Lp1], [Lp2]]);
+    distCoeffsR = np.array([[Rk1], [Rk2], [Rp1], [Rp2], [Rk3]]);
+    distCoeffsL = np.array([[Lk1], [Lk2], [Lp1], [Lp2], [Lk3]]);
 
     # camera - extrinsics
 
@@ -112,7 +112,7 @@ def zed_camera_calibration(camera_calibration, camera_mode, full_width, height):
 
     # N.B.  ZED camera are pre-rectified
 
-    return Lfx, Lfy, Baseline, K_CameraMatrix_left, K_CameraMatrix_right, R, T, Q;
+    return Lfx, Lfy, Baseline, K_CameraMatrix_left, K_CameraMatrix_right, distCoeffsL, distCoeffsR, R, T, Q;
 
 
 ################################################################################
@@ -137,6 +137,10 @@ def read_manual_calibration(calibration_file):
             K_CameraMatrix_right = f.getNode("K_r").mat()
             Lfx = K_CameraMatrix_left[0][0]
             Lfy = K_CameraMatrix_left[1][1]
+
+            distCoeffsL = np.zeros(5)
+            distCoeffsR = np.zeros(5)
+
             R = f.getNode("R").mat()
             T = f.getNode("T").mat()
             Baseline = -1 * T[0][0] # i.e. x-axis of T vector
@@ -145,8 +149,7 @@ def read_manual_calibration(calibration_file):
             print("Error - specified XML config file does not contain valid camera config.");
             exit(1);
 
-        return Lfx, Lfy, Baseline, K_CameraMatrix_left, K_CameraMatrix_right, R, T, Q;
-
+        return Lfx, Lfy, Baseline, K_CameraMatrix_left, K_CameraMatrix_right, distCoeffsL, distCoeffsR, R, T, Q;
     else:
         print("Error - cannot open specified XML config file.");
         exit(1);

@@ -109,6 +109,8 @@ def open3d_library_available():
 
 ################################################################################
 
+# prepare undistortion and rectification maps
+
 def initCalibration(Kl, Kr, distCoeffsL, distCoeffsR, height, width, R, T):
     R1, R2, P1, P2, _, _, _ = cv2.stereoRectify(Kl, distCoeffsL, Kr, distCoeffsR, (width, height), R, T, cv2.CALIB_ZERO_DISPARITY, 0, (width, height))
 
@@ -116,3 +118,51 @@ def initCalibration(Kl, Kr, distCoeffsL, distCoeffsR, height, width, R, T):
     map_r_x, map_r_y = cv2.initUndistortRectifyMap(Kr, distCoeffsL, R2, P2, (width, height), cv2.CV_32FC2)
 
     return P1, P2, map_l_x, map_l_y, map_r_x, map_r_y
+
+################################################################################
+
+# reproject disparity map to 3D
+def reproject(frameL, disparity, Q):
+    points = []
+    colours = []
+    dispShape = disparity.shape
+    
+    #prepare list of colours and points in format [x, y, d[y, x], 1]
+    for x in range(dispShape[1]):
+        for y in range(dispShape[0]):
+            if disparity[y, x] != 0:
+                t = np.array([x, y, disparity[y, x], 1])
+                points.append(t.T)
+                colours.append(list(frameL[y, x]))
+    
+    #reproject each point to 3d homogeneous coordinates
+    points = [Q.dot(t) for t in points]
+    
+    #convert to 3d world coordinates
+    points = [t[:3] / t[3] for t in points]
+    return points, colours
+
+from numba import jit, njit
+@njit()
+def reproject_fast(frameL, disparity, Q):
+    points = []
+    points3d = []
+    colours = []
+    dispShape = disparity.shape
+    
+    #prepare list of colours and points in format [x, y, d[y, x], 1]
+    for x in range(dispShape[1]):
+        for y in range(dispShape[0]):
+            if disparity[y, x] != 0:
+                t = np.array([x, y, disparity[y, x], 1])
+                points.append(t.T)
+                colours.append(list(frameL[y, x]))
+    
+    #convert to 3d world coordinates
+    for i in range(len(points)):
+        #reproject each point to 3d homogeneous coordinates
+        point = Q.dot(points[i])
+        #convert to global
+        points3d.append(point[:3] / point[3])
+
+    return points3d, colours

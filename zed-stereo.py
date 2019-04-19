@@ -11,6 +11,8 @@
 import cv2
 import argparse
 import sys
+import os
+import time
 import math
 
 import requests
@@ -108,6 +110,7 @@ parser.add_argument("-t",  "--showcentredepth", action='store_true', help="displ
 parser.add_argument("-hs", "--sidebysideh", action='store_true', help="display left image and disparity side by side horizontally (stacked)");
 parser.add_argument("-vs", "--sidebysidev", action='store_true', help="display left image and disparity top to bottom vertically (stacked)");
 parser.add_argument("-xml", "--config_file_xml", type=str, help="manual camera calibration XML configuration file", default='');
+parser.add_argument("-dir", "--save_directory", type=str, help="directory for captured images to be stored", default="Images")
 parser.add_argument("--showcontrols", action='store_true', help="display track bar disparity tuning controls");
 if (open3d_available):
     parser.add_argument("-3d", "--show3d", action='store_true', help="display resulting live 3D point cloud");
@@ -207,6 +210,7 @@ print("t \t - toggle display centre target cross-hairs and depth");
 print("h \t - toggle horizontal side by side [left image | disparity]");
 print("v \t - toggle vertical side by side [left image | disparity]");
 print("i \t - toggle disparity in-filling via interpolation");
+print("p \t - save left and right image")
 print("x \t - exit");
 print();
 
@@ -243,23 +247,23 @@ windowName3D = "Live - 3D Point Cloud"; # window name
 
 # set up defaults for stereo disparity calculation
 
-max_disparity = 160;
-window_size = 9;
-block_size = 15
+max_disparity = 128
+window_size = 9
+block_size = 19
 
 ### modified for 2K image
 stereoProcessor = cv2.StereoSGBM_create(
         minDisparity=0,
         numDisparities = max_disparity, # max_disp has to be dividable by 16 f. E. HH 192, 256
         blockSize=block_size,
-        #P1=8 * 3 * window_size ** 2,       # 8*number_of_image_channels*SADWindowSize*SADWindowSize
-        #P2=32 * 3 * window_size ** 2,      # 32*number_of_image_channels*SADWindowSize*SADWindowSize
-        #disp12MaxDiff=1,
-        #uniquenessRatio=5,
-        #speckleWindowSize=0,
-        #speckleRange=2,
-        #preFilterCap=15,
-        mode=cv2.STEREO_SGBM_MODE_HH
+        P1=8 * 3 * window_size ** 2,       # 8*number_of_image_channels*SADWindowSize*SADWindowSize
+        P2=32 * 3 * window_size ** 2,      # 32*number_of_image_channels*SADWindowSize*SADWindowSize
+        disp12MaxDiff=1,
+        uniquenessRatio=10,
+        speckleWindowSize=100,
+        speckleRange=1,
+        #preFilterCap=63,
+        mode=cv2.STEREO_SGBM_MODE_HH4
 )
 
 # calculate rectification transforms
@@ -287,7 +291,7 @@ if (zed_cam.isOpened()) :
 
         point_cloud = o3d.PointCloud();
         #dummy point cloud to define viewing parameters
-        point_cloud.points = o3d.Vector3dVector(np.array([[i, 0, 0] for i in range(-60, 60)]))
+        point_cloud.points = o3d.Vector3dVector(np.array([[i, 0, 0] for i in range(-6000, 6000)]))
         window_3d_vis.add_geometry(point_cloud);
 
         coordinate_axes = o3d.create_mesh_coordinate_frame(size=10, origin=[0, 0, 0])
@@ -393,49 +397,35 @@ if (zed_cam.isOpened()) :
 
             #remove all points from the point cloud
             point_cloud.clear();
-            
+            temp_pcd = o3d.PointCloud()
             #initialise new array for points and colours
-            points = []
-            colours = []
+            points, colours = reproject_fast(frameL, disparity_scaled, Q)
 
-            dispShape = disparity_scaled.shape
-
-            #prepare list of colours and points in format [x, y, d[y, x], 1]
-            for x in range(dispShape[1]):
-                for y in range(dispShape[0]):
-                    if disparity_scaled[y, x] != 0:
-                        t = np.array([x, y, disparity_scaled[y, x], 1])
-                        points.append(t.T)
-                        colours.append(list(frameL[y, x]))
-
-            #reproject each point to 3d homogeneous coordinates
-            points = [Q.dot(t) for t in points]
-
-            #convert to 3d world coordinates
-            points = [t[:3] / t[3] for t in points]
-            
             #rawPoints = np.array(depth_image)
             #rawPoints = rawPoints.reshape(-1, rawPoints.shape[-1])
             
-            point_cloud.points = o3d.Vector3dVector(np.array(points))
+            if len(points) > 0:
+                temp_pcd.points = o3d.Vector3dVector(np.array(points))
             
-            #colours are represented as floats in range [0, 1]
-            point_cloud.colors = o3d.Vector3dVector(np.array(colours) / 255.)
+                #colours are represented as floats in range [0, 1]
+                temp_pcd.colors = o3d.Vector3dVector(np.array(colours) / 255.)
             
             # Flip it, otherwise the pointcloud will be upside down
-            point_cloud.transform([[-1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]]);
-            point_cloud = o3d.crop_point_cloud(point_cloud, np.array([-5000., -3000.0000, -10000.0000]), np.array([5000.0000, 3000.0000, 0.0000]))
+            temp_pcd.transform([[-1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]]);
+            temp_pcd = o3d.crop_point_cloud(temp_pcd, np.array([-5000., -3000.0000, -20000.0000]), np.array([5000.0000, 3000.0000, 0.0000]))
 
+            point_cloud += temp_pcd
+            
             if args.single_shot_display:
                 o3d.draw_geometries([point_cloud, coordinate_axes])
             else:
                 # update the 3D visualization which is referencing the depth points
 
-                window_3d_vis.add_geometry(point_cloud);
-                window_3d_vis.update_geometry();
+                #window_3d_vis.add_geometry(point_cloud);
                 #window_3d_vis.reset_view_point(True);
-                window_3d_vis.poll_events();
-                window_3d_vis.update_renderer();
+                window_3d_vis.update_geometry()
+                window_3d_vis.poll_events()
+                window_3d_vis.update_renderer()
 
 
             # o3d.draw_geometries([point_cloud])
@@ -508,6 +498,16 @@ if (zed_cam.isOpened()) :
             args.sidebysideh = not(args.sidebysideh);
         elif (key == ord('v')):
             args.sidebysidev = not(args.sidebysidev);
+        elif (key == ord('p')):
+            if not os.path.exists(args.save_directory):
+                os.mkdir(args.save_directory)
+            if not os.path.exists(os.path.join(args.save_directory, "left")):
+                os.mkdir(args.save_directory + "/left")
+            if not os.path.exists(os.path.join(args.save_directory, "right")):
+                os.mkdir(args.save_directory + "/right")
+            currentTime = str(time.time())
+            cv2.imwrite(os.path.join(args.save_directory, "left", currentTime + "_L.jpg"), frameL)
+            cv2.imwrite(os.path.join(args.save_directory, "right", currentTime + "_R.jpg"), frameR)
         elif (key == ord(' ')):
 
             # cycle camera resolutions to get the next one on the list

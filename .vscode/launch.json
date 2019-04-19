@@ -6,12 +6,20 @@
     "configurations": [
 
         {
-            "name": "Python: Current File (Integrated Terminal)",
+            "name": "Stereo",
             "type": "python",
             "request": "launch",
-            "args": ["-cf", "zed-cam-sn-1877.conf"],
+            "args": ["-cf", "zed-cam-sn-1877.conf"],            
             "program": "${workspaceFolder}/zed-stereo.py",
-            "console": "integratedTerminal"
+            "console": "integratedTerminal",
+        },
+        {
+            "name": "3D",
+            "type": "python",
+            "request": "launch",
+            "args": ["-cf", "zed-cam-sn-1877.conf", "-3d", "-single"],
+            "program": "${workspaceFolder}/zed-stereo.py",
+            "console": "integratedTerminal",
         }
     ]
 }

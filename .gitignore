@@ -6,6 +6,9 @@ __pycache__/
 # Captured images
 Images/
 
+# Point clouds
+*.ply
+
 # VSCode config
 .vscode/
 

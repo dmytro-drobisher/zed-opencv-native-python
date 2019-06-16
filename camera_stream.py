@@ -21,98 +21,108 @@ import cv2
 ################################################################################
 
 class CameraVideoStream:
-	def __init__(self, name="CameraVideoStream"):
+    def __init__(self, name="CameraVideoStream"):
 
-		# initialize the thread name
-		self.name = name
+        # initialize the thread name
+        self.name = name
 
-		# initialize the variables used to indicate if the thread should
-		# be stopped or suspended
-		self.stopped = False
-		self.suspend = False
+        # initialize the variables used to indicate if the thread should
+        # be stopped or suspended
+        self.stopped = False
+        self.suspend = False
 
-		# set these to null values initially
-		self.grabbed = 0;
-		self.frame = None;
+        # set these to null values initially
+        self.grabbed = 0;
+        self.frame = None;
 
-	def open(self, src=0):
-		# initialize the video camera stream and read the first frame
-		# from the stream
-		self.camera = cv2.VideoCapture(src)
-		(self.grabbed, self.frame) = self.camera.read()
+    def open(self, src=0):
+        # initialize the video camera stream and read the first frame
+        # from the stream
+        self.camera = cv2.VideoCapture(src)
+        (self.grabbed, self.frame) = self.camera.read()
 
-		# only start the thread if in-fact the camera read was successful
-		if (self.grabbed):
-			# start the thread to read frames from the video stream
-			t = Thread(target=self.update, name=self.name, args=())
-			t.daemon = True
-			t.start()
+        # only start the thread if in-fact the camera read was successful
+        if (self.grabbed):
+            # start the thread to read frames from the video stream
+            t = Thread(target=self.update, name=self.name, args=())
+            t.daemon = True
+            t.start()
 
-		return (self.grabbed > 0);
+        return (self.grabbed > 0);
 
-	def update(self):
-		# keep looping infinitely until the thread is stopped
-		while True:
-			# if the thread indicator variable is set, stop the thread
-			if self.stopped:
-				self.grabbed = 0; # set flag to ensure isOpen() returns False
-				self.camera.release(); # cleanly release camera hardware
-				return
+    def update(self):
+        # keep looping infinitely until the thread is stopped
+        while True:
+            # if the thread indicator variable is set, stop the thread
+            if self.stopped:
+                self.grabbed = 0; # set flag to ensure isOpen() returns False
+                self.camera.release(); # cleanly release camera hardware
+                return
 
-			# otherwise, read the next frame from the stream
-			# provided we are not suspended
+            # otherwise, read the next frame from the stream
+            # provided we are not suspended
 
-			if not(self.suspend):
-				(self.grabbed, self.frame) = self.camera.read()
+            if not(self.suspend):
+                (self.grabbed, self.frame) = self.camera.read()
 
-	def grab(self):
-		# return status of most recent grab by the thread
-		return self.grabbed;
+    def grab(self):
+        # return status of most recent grab by the thread
+        return self.grabbed;
 
-	def retrieve(self):
-		# same as read() in the context of threaded capture
-		return self.read();
+    def retrieve(self):
+        # same as read() in the context of threaded capture
+        return self.read();
 
-	def read(self):
-		# return the frame most recently read
-		return (self.grabbed, self.frame)
+    def read(self):
+        # return the frame most recently read
+        return (self.grabbed, self.frame)
 
-	def isOpened(self):
-		# indicate that the camera is open successfully
-		return (self.grabbed > 0);
+    def isOpened(self):
+        # indicate that the camera is open successfully
+        return (self.grabbed > 0);
 
-	def release(self):
-		# indicate that the thread should be stopped
-		self.stopped = True
+    def release(self):
+        # indicate that the thread should be stopped
+        self.stopped = True
 
-	def set(self, property_name, property_value):
-		# set a video capture property (behavior as per OpenCV manual for VideoCapture)
+    def pause(self):
+        # pause the video capture to change camera properties
+        self.suspend = True
 
-		# first suspend thread
-		self.suspend = True;
+    def resume(self):
+        # resume video capture
+        self.camera.grab()
+        (self.grabbed, self.frame) = self.camera.read()
+        self.suspend = False
 
-		# set value - wrapping it in grabs() so it takes effect
-		self.camera.grab()
-		ret_val = self.camera.set(property_name, property_value)
-		self.camera.grab()
+    def set(self, property_name, property_value):
+        # set a video capture property (behavior as per OpenCV manual for VideoCapture)
 
-		# whilst we are still suspended flush the frame buffer held inside
-		# the object by reading a new frame with new settings otherwise a race
-		# condition will exist between the thread's next call to update() after
-		# it un-suspends and the next call to read() by the object user
-		(self.grabbed, self.frame) = self.camera.read()
+        # first suspend thread
+        self.suspend = True;
 
-		# restart thread by unsuspending it
-		self.suspend = False;
+        # set value - wrapping it in grabs() so it takes effect
+        self.camera.grab()
+        ret_val = self.camera.set(property_name, property_value)
+        self.camera.grab()
 
-		return ret_val;
+        # whilst we are still suspended flush the frame buffer held inside
+        # the object by reading a new frame with new settings otherwise a race
+        # condition will exist between the thread's next call to update() after
+        # it un-suspends and the next call to read() by the object user
+        (self.grabbed, self.frame) = self.camera.read()
 
-	def get(self, property_name):
-		# get a video capture property (behvavior as per OpenCV manual for VideoCapture)
-		return self.camera.get(property_name)
+        # restart thread by unsuspending it
+        #self.suspend = False;
 
-	def getBackendName():
-		 # get a video capture backend (behvavior as per OpenCV manual for VideoCapture)
-		 return self.camera.getBackendName()
+        return ret_val;
+
+    def get(self, property_name):
+        # get a video capture property (behvavior as per OpenCV manual for VideoCapture)
+        return self.camera.get(property_name)
+	
+    def getBackendName(self):
+        # get a video capture backend (behvavior as per OpenCV manual for VideoCapture)
+        return self.camera.getBackendName()
 
 ################################################################################

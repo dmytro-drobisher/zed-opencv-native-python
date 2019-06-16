@@ -20,6 +20,14 @@
             "args": ["-cf", "zed-cam-sn-1877.conf", "-3d", "-single"],
             "program": "${workspaceFolder}/zed-stereo.py",
             "console": "integratedTerminal",
+        },
+        {
+            "name": "Reconstruction",
+            "type": "python",
+            "request": "launch",
+            "args": ["-cf", "zed-cam-sn-1877.conf", "-r"],
+            "program": "${workspaceFolder}/zed-reconstruction.py",
+            "console": "integratedTerminal",
         }
     ]
 }

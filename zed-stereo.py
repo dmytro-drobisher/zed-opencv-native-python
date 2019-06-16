@@ -247,9 +247,9 @@ windowName3D = "Live - 3D Point Cloud"; # window name
 
 # set up defaults for stereo disparity calculation
 
-max_disparity = 128
-window_size = 9
-block_size = 19
+max_disparity = 192
+window_size = 5
+block_size = 9
 
 ### modified for 2K image
 stereoProcessor = cv2.StereoSGBM_create(
@@ -262,12 +262,15 @@ stereoProcessor = cv2.StereoSGBM_create(
         uniquenessRatio=10,
         speckleWindowSize=100,
         speckleRange=1,
-        #preFilterCap=63,
-        mode=cv2.STEREO_SGBM_MODE_HH4
+        preFilterCap=63,
+        mode=cv2.STEREO_SGBM_MODE_HH
 )
 
+rightStereoMatcher = cv2.ximgproc.createRightMatcher(stereoProcessor)
+wlsFilter = cv2.ximgproc.createDisparityWLSFilter(stereoProcessor)
+
 # calculate rectification transforms
-Kl, Kr, map_l_x, map_l_y, map_r_x, map_r_y = initCalibration(Kl, Kr, distCoeffsL, distCoeffsR, height, width // 2, R, T)
+Kl, Kr, map_l_x, map_l_y, map_r_x, map_r_y, Q = initCalibration(Kl, Kr, distCoeffsL, distCoeffsR, height, width // 2, R, T)
 
 ################################################################################
 
@@ -294,7 +297,7 @@ if (zed_cam.isOpened()) :
         point_cloud.points = o3d.Vector3dVector(np.array([[i, 0, 0] for i in range(-6000, 6000)]))
         window_3d_vis.add_geometry(point_cloud);
 
-        coordinate_axes = o3d.create_mesh_coordinate_frame(size=10, origin=[0, 0, 0])
+        coordinate_axes = o3d.create_mesh_coordinate_frame(size=0.1, origin=[0, 0, 0])
 
         o3d.set_verbosity_level(o3d.VerbosityLevel.Debug);
 
@@ -367,7 +370,10 @@ if (zed_cam.isOpened()) :
         # compute disparity image from undistorted and rectified versions
         # (which for reasons best known to the OpenCV developers is returned scaled by 16)
 
-        disparity = stereoProcessor.compute(grayL,grayR);
+        #disparity = stereoProcessor.compute(grayL,grayR);
+        leftDisp = np.int16(stereoProcessor.compute(grayL, grayR))
+        rightDisp = np.int16(rightStereoMatcher.compute(grayR, grayL))
+        disparity = wlsFilter.filter(leftDisp, frameL, None, rightDisp)
 
         cv2.filterSpeckles(disparity, 0, 4000, 200);
 
@@ -378,7 +384,7 @@ if (zed_cam.isOpened()) :
         # as disparity=-1 means no disparity available
 
         _, disparity = cv2.threshold(disparity,0, max_disparity * 16, cv2.THRESH_TOZERO);
-        disparity_scaled = np.around(disparity / 16, decimals=1);
+        disparity_scaled = np.around(disparity / 16., decimals=1);
 
         # fill disparity if requested
 
@@ -399,7 +405,7 @@ if (zed_cam.isOpened()) :
             point_cloud.clear();
             temp_pcd = o3d.PointCloud()
             #initialise new array for points and colours
-            points, colours = reproject_fast(frameL, disparity_scaled, Q)
+            points, colours, _ = reproject_fast(frameL, disparity_scaled, Q)
 
             #rawPoints = np.array(depth_image)
             #rawPoints = rawPoints.reshape(-1, rawPoints.shape[-1])
@@ -411,8 +417,8 @@ if (zed_cam.isOpened()) :
                 temp_pcd.colors = o3d.Vector3dVector(np.array(colours) / 255.)
             
             # Flip it, otherwise the pointcloud will be upside down
-            temp_pcd.transform([[-1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]]);
-            temp_pcd = o3d.crop_point_cloud(temp_pcd, np.array([-5000., -3000.0000, -20000.0000]), np.array([5000.0000, 3000.0000, 0.0000]))
+            temp_pcd = o3d.crop_point_cloud(temp_pcd, np.array([-5., -5.0000, 0.0000]), np.array([5.0000, 5.0000, 10.0000]))
+            temp_pcd.transform([[1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]]);
 
             point_cloud += temp_pcd
             
@@ -526,7 +532,7 @@ if (zed_cam.isOpened()) :
 
                     if (list_widths[pos % len(list_widths)] == width):
 
-                        camera_mode = config_options_width[list_widths[(pos+1) % len(list_widths)]]
+                        camera_mode = config_options_width[list_widths[(pos-1) % len(list_widths)]]
 
                         # get new camera resolution
 
@@ -536,12 +542,13 @@ if (zed_cam.isOpened()) :
                         print ("Changing camera config to use: ", camera_mode, " @ ", width, " x ", height);
                         break;
 
-                    pos+=1
+                    pos-=1
 
             # reset to new camera resolution
 
             zed_cam.set(cv2.CAP_PROP_FRAME_WIDTH, width)
             zed_cam.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+            zed_cam.suspend = False
 
             width = int(zed_cam.get(cv2.CAP_PROP_FRAME_WIDTH))
             height =  int(zed_cam.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -563,7 +570,7 @@ if (zed_cam.isOpened()) :
                 fx, fy, B, Kl, Kr, distCoeffsL, distCoeffsR, R, T, Q = zed_camera_calibration(cam_calibration, camera_mode, width, height);
                 
                 #recalculate rectification maps
-                Kl, Kr, map_l_x, map_l_y, map_r_x, map_r_y = initCalibration(Kl, Kr, distCoeffsL, distCoeffsR, height, width // 2, R, T)
+                Kl, Kr, map_l_x, map_l_y, map_r_x, map_r_y, Q = initCalibration(Kl, Kr, distCoeffsL, distCoeffsR, height, width // 2, R, T)
 
             ####################################################################
 
